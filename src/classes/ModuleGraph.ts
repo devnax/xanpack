@@ -79,6 +79,8 @@ export class ModuleGraph {
 
   private collectImports(node: ModuleNode, body: any[]): void {
     for (const statement of body) {
+      console.log(statement);
+
       // import x from "x"
       // import { x } from "x"
       // import * as x from "x"
