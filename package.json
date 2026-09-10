@@ -1,0 +1,40 @@
+{
+  "name": "xanpack",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": "dist/bin/index.js",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "dev": "tsc --watch --preserveWatchOutput",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "keywords": [],
+  "author": "Naxrul Ahmed",
+  "license": "ISC",
+  "dependencies": {
+    "oxc-minify": "^0.149.0",
+    "oxc-parser": "^0.149.0",
+    "oxc-resolver": "^11.24.2",
+    "oxc-transform": "^0.149.0",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "@types/prompts": "^2.4.9",
+    "@types/react": "^19.3.0",
+    "react": "^19.3.0"
+  }
+}
