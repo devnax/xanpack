@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-
+import { minify } from "oxc-minify";
 import { XanpackNodes, XanpackOption } from "../types/Xanpack.js";
+import { SourceMap, transform } from "oxc-transform";
 
 import ParseFile from "./ParseFile/index.js";
 import Resolver from "./ParseFile/Resolver.js";
@@ -39,9 +40,54 @@ class Xanpack {
     );
 
     const linker = new Linker(this.Nodes);
-    const code = linker.link(input.resolved);
+    // const code = linker.link(input.resolved);
 
-    await this.writeOutput(input.resolved, code);
+    let codes = `
+const __xpack = {
+  __module: Object.create(null),
+  __cache: Object.create(null),
+
+  module(id, factory) {
+    __xpack.__module[id] = factory;
+  },
+  import: (id) => {
+    if (__xpack.__cache[id]) {
+      return __xpack.__cache[id].exports;
+    }
+
+    const module = {
+      exports: {},
+    };
+
+    __xpack.__cache[id] = module;
+    __xpack.__module[id](module, module.exports);
+
+    return module.exports;
+  },
+  importAsync: () => {},
+};
+`;
+
+    for (const node of this.Nodes.values()) {
+      codes += node.code + "\n\n";
+    }
+
+    const root = input.resolved
+      .replace(process.cwd(), "")
+      .replaceAll("\\", "/");
+    codes += `
+    __xpack.import(${JSON.stringify(root)});
+        `;
+
+    const transformed = await transform(this.option.input as string, codes);
+
+    // const minified = await minify(
+    //   this.resolver.resolve(process.cwd(), this.option.input as string)
+    //     .resolved,
+    //   transformed.code,
+    // );
+    // await this.writeOutput(input.resolved, minified.code);
+    await this.writeOutput(input.resolved, transformed.code);
   }
 
   async buildGraph(): Promise<void> {
@@ -62,9 +108,6 @@ class Xanpack {
     }
 
     const parser = new ParseFile(resolvedPath, this);
-
-    // Register before parsing so circular
-    // dependencies do not recurse forever.
     this.Nodes.set(resolvedPath, parser);
 
     await parser.parse();

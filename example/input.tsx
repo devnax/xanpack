@@ -1,7 +1,6 @@
-import multiply from "./code/multiply";
+import React from "react";
+const App = () => {
+  return React.Activity;
+};
 
-if (__DEV__) {
-  console.log(multiply(2, 2));
-  console.log(multiply(2, 2));
-}
-const foo = __DEV__ ? 1 : 2;
+export default App;

@@ -25,15 +25,15 @@
   "author": "Naxrul Ahmed",
   "license": "ISC",
   "dependencies": {
-    "@oxc-parser/binding-darwin-arm64": "^0.149.0",
-    "@oxc-transform/binding-darwin-arm64": "^0.148.0",
     "@types/react-dom": "^19.3.0",
     "esrap": "^2.3.7",
+    "lodash": "^4.18.1",
     "oxc-minify": "^0.149.0",
     "oxc-parser": "^0.149.0",
     "oxc-resolver": "^11.24.2",
     "oxc-transform": "^0.149.0",
     "oxc-walker": "^1.1.1",
+    "oxfmt": "^0.67.0",
     "react-dom": "^19.3.0",
     "typescript": "^5.9.3"
   },

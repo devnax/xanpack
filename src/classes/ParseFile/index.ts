@@ -6,7 +6,13 @@ import type { ExportInfo, ImportInfo, ModuleType, ModuleFormat } from "./types";
 import ExtractImports from "./ExtractImports.js";
 import ExtractExports from "./ExtractExports.js";
 import ExtractCJSExports from "./ExtractCjsExports.js";
+import ReplaceExport from "./Replace/export.js";
 import Xanpack from "../Xanpack.js";
+import { createHash } from "node:crypto";
+import ReplaceRequire from "./Replace/require.js";
+import { format } from "oxfmt";
+import ReplaceImport from "./Replace/import.js";
+import { ScopeAnalyzer } from "./ScopeAnalyzer.js";
 
 class ParseFile {
   format: ModuleFormat = "esm";
@@ -49,6 +55,10 @@ class ParseFile {
     }
   }
 
+  normalizePath(filePath: string): string {
+    return filePath.replaceAll(process.cwd(), "").replaceAll("\\", "/");
+  }
+
   async parse() {
     const lang = this.getLanguage();
     const content = await this.readFile();
@@ -58,6 +68,10 @@ class ParseFile {
       // sourcemap: true,
     });
 
+    const hash = this.normalizePath(this.resolved);
+    const replaceRequire = new ReplaceRequire(result.code);
+    const replaceExport = new ReplaceExport(result.code);
+    const replaceImport = new ReplaceImport(result.code);
     const parsed = parseSync(this.resolved, result.code, {
       lang,
     });
@@ -66,36 +80,71 @@ class ParseFile {
     this.sourcemap = result.map;
     this.ast = parsed;
 
-    let hasESM = false;
-    let hasCJS = false;
+    const analizer = new ScopeAnalyzer();
+    const globalScope = analizer.analyze(parsed.program);
+    console.log(this.resolved, parsed.program.sourceType);
+    // console.dir(globalScope, { depth: 10 });
+
+    const isScript = parsed.program.sourceType === "script";
+
     walk(parsed.program, {
-      enter: (node) => {
+      enter: (node, parent, key) => {
+        if (isScript) {
+          replaceRequire.add(node);
+          replaceExport.add(node);
+          replaceImport.add(node);
+        }
         const importsFromNode = ExtractImports.extract(node);
         const exportsFromNode = ExtractExports.extract(node);
         const exportsCjsFromNode = ExtractCJSExports.extract(node);
-
-        if (exportsFromNode.length > 0) {
-          hasESM = true;
-        }
-
-        if (exportsCjsFromNode.length > 0) {
-          hasCJS = true;
-        }
 
         this.imports.push(...importsFromNode);
         this.exports.push(...exportsFromNode);
         this.exports.push(...exportsCjsFromNode);
       },
     });
+    // this.code = replaceRequire.apply();
+    // this.code = replaceExport.apply();
+    // this.code = replaceImport.apply();
 
-    if (hasESM && !hasCJS) {
-      this.format = "esm";
-    } else if (hasCJS && !hasESM) {
-      this.format = "cjs";
-    } else if (hasESM && hasCJS) {
-      this.format = "cjs";
-    } else {
+    const replacements = [
+      ...replaceRequire.replacements,
+      ...replaceExport.replacements,
+      ...replaceImport.replacements,
+    ];
+
+    replacements.sort((a, b) => b.start - a.start);
+
+    let _replaced = this.code;
+
+    for (const replacement of replacements) {
+      _replaced =
+        _replaced.slice(0, replacement.start) +
+        replacement.code +
+        _replaced.slice(replacement.end);
     }
+
+    if (isScript) {
+      this.code = `
+__xpack.module(${JSON.stringify(hash)}, (module, exports) => {
+${this.indent(_replaced, 2)}
+})`;
+    } else {
+      this.code = _replaced;
+    }
+
+    // const { code } = await format("a.js", wrapped, {});
+    // this.code = wrapped;
+  }
+
+  private indent(code: string, spaces: number): string {
+    const prefix = " ".repeat(spaces);
+
+    return code
+      .trim()
+      .split("\n")
+      .map((line) => (line.trim() ? prefix + line : line))
+      .join("\n");
   }
 }
 
