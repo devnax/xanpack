@@ -3,34 +3,42 @@ import path from "node:path";
 import { minify } from "oxc-minify";
 import { XanpackNodes, XanpackOption } from "../types/Xanpack.js";
 import { SourceMap, transform } from "oxc-transform";
-
+import { print } from "esrap";
+import tsx from "esrap/languages/ts";
 import ParseFile from "./ParseFile/index.js";
 import Resolver from "./ParseFile/Resolver.js";
 import Linker from "./Linker.js";
 
 class Xanpack {
   readonly option: XanpackOption;
-
   readonly Nodes: XanpackNodes = new Map();
-
   readonly resolver: Resolver;
 
   constructor(option: XanpackOption) {
     this.option = {
       ...option,
-
-      define: {
-        "process.env.NODE_ENV": JSON.stringify(
-          process.env.NODE_ENV || "development",
-        ),
-
-        ...option?.define,
+      transform: {
+        define: {
+          "process.env.NODE_ENV": JSON.stringify(
+            process.env.NODE_ENV || "development",
+          ),
+          ...option?.transform?.define,
+        },
+        ...option?.transform,
       },
     };
 
     this.resolver = new Resolver(this);
   }
+  private indent(code: string, spaces: number): string {
+    const prefix = " ".repeat(spaces);
 
+    return code
+      .trim()
+      .split("\n")
+      .map((line) => (line.trim() ? prefix + line : line))
+      .join("\n");
+  }
   async build(): Promise<void> {
     await this.buildGraph();
 
@@ -69,7 +77,25 @@ const __xpack = {
 `;
 
     for (const node of this.Nodes.values()) {
-      codes += node.code + "\n\n";
+      try {
+        const result = print(node.ast.program, tsx());
+        const id = node.resolved
+          .replace(process.cwd() + "/", "")
+          .replace("node_modules/", "")
+          .replaceAll("-", "_")
+          .replaceAll("\\", "/")
+          .replaceAll(/\//g, "_")
+          .split(".")[0];
+
+        codes += `
+const require_${id} = __mod((module, exports) => {
+${this.indent(result.code, 4)}
+});
+    `;
+      } catch (error) {
+        console.log(error);
+        console.dir(node.ast.program, { depth: null });
+      }
     }
 
     const root = input.resolved
@@ -79,25 +105,19 @@ const __xpack = {
     __xpack.import(${JSON.stringify(root)});
         `;
 
-    const transformed = await transform(this.option.input as string, codes);
-
     // const minified = await minify(
     //   this.resolver.resolve(process.cwd(), this.option.input as string)
     //     .resolved,
-    //   transformed.code,
+    //   codes,
     // );
     // await this.writeOutput(input.resolved, minified.code);
-    await this.writeOutput(input.resolved, transformed.code);
+    await this.writeOutput(input.resolved, codes);
   }
 
   async buildGraph(): Promise<void> {
     const input = this.option.input as string;
     const resolved = this.resolver.resolve(process.cwd(), input);
     await this.buildModule(resolved.resolved);
-
-    // for (let node of this.Nodes.values()) {
-    //   console.log(node.exports);
-    // }
   }
 
   private async buildModule(resolvedPath: string): Promise<ParseFile> {
@@ -136,23 +156,26 @@ const __xpack = {
   }
 
   private async writeOutput(input: string, code: string): Promise<void> {
-    const outDir = path.resolve(process.cwd(), "build");
+    const outDir = this.option.output.dir;
 
+    // delete outdir
+    if (fs.existsSync(outDir)) {
+      await fs.promises.rm(outDir, {
+        recursive: true,
+        force: true,
+      });
+    }
     await fs.promises.mkdir(outDir, {
       recursive: true,
     });
 
     const inputName = path.basename(input);
-
     const outputName = inputName
       .replace(/\.(tsx?|jsx?|mjs|cjs)$/, "")
       .concat(".js");
 
     const outputPath = path.join(outDir, outputName);
-
     await fs.promises.writeFile(outputPath, code, "utf8");
-
-    console.log(`Compiled: ${outputPath}`);
   }
 }
 

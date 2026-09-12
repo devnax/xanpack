@@ -1,6 +1,8 @@
-import React from "react";
-const App = () => {
-  return React.Activity;
-};
+import multiply from "./code/multiply";
+import "react-dom";
 
-export default App;
+console.log(multiply(1, 2));
+
+export const re = () => {
+  return require("react");
+};
