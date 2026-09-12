@@ -3,7 +3,12 @@ import xanpack from "./functions/xanpack.js";
 
 const main = async () => {
   const xp = await xanpack({
-    input: path.resolve(process.cwd(), "example/input.ts"),
+    input: path.resolve(process.cwd(), "example/input.tsx"),
+    define: {
+      __DEV__: JSON.stringify(false),
+
+      "process.env.NODE_ENV": JSON.stringify("development"),
+    },
   });
 };
 main();

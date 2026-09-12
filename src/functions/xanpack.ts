@@ -3,7 +3,7 @@ import { XanpackOption } from "../types/Xanpack.js";
 
 const xanpack = async (option: XanpackOption) => {
   const xp = new Xanpack(option);
-  await xp.buildGraph();
+  await xp.build();
   return xp;
 };
 
