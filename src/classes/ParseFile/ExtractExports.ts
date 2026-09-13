@@ -50,16 +50,16 @@ export default class ExtractExports {
      * export class Foo {}
      */
     if (node.declaration) {
-      exports.push(...this.extractDeclaration(node.declaration));
+      exports.push(
+        ...this.extractDeclaration(node.declaration, node.start, node.end),
+      );
     }
 
     /*
      * export { foo };
-     *
      * export { foo as bar };
      *
      * export { foo } from "./foo";
-     *
      * export { foo as bar } from "./foo";
      */
     for (const specifier of node.specifiers) {
@@ -71,31 +71,39 @@ export default class ExtractExports {
       const local = this.getName(specifier.local);
 
       /*
+       * Re-export:
+       *
        * export { foo } from "./foo";
-       *
        * export { foo as bar } from "./foo";
-       *
-       * These are re-exports.
        */
       if (node.source) {
         exports.push({
           name,
           local,
           kind: "re-export",
+          loc: {
+            start: node.start,
+            end: node.end,
+          },
         });
 
         continue;
       }
 
       /*
-       * export { foo };
+       * Local export:
        *
+       * export { foo };
        * export { foo as bar };
        */
       exports.push({
         name,
         local,
         kind: "named",
+        loc: {
+          start: node.start,
+          end: node.end,
+        },
       });
     }
 
@@ -118,7 +126,6 @@ export default class ExtractExports {
 
     /*
      * export default function foo() {}
-     *
      * export default class Foo {}
      */
     if (
@@ -126,10 +133,9 @@ export default class ExtractExports {
       declaration.type === "ClassDeclaration"
     ) {
       /*
-       * Named declaration:
+       * Named:
        *
        * export default function foo() {}
-       *
        * export default class Foo {}
        */
       if (declaration.id) {
@@ -138,15 +144,18 @@ export default class ExtractExports {
             name: "default",
             local: declaration.id.name,
             kind: "default",
+            loc: {
+              start: node.start,
+              end: node.end,
+            },
           },
         ];
       }
 
       /*
-       * Anonymous declaration:
+       * Anonymous:
        *
        * export default function () {}
-       *
        * export default class {}
        */
       return [
@@ -154,6 +163,10 @@ export default class ExtractExports {
           name: "default",
           local: "default",
           kind: "default",
+          loc: {
+            start: node.start,
+            end: node.end,
+          },
         },
       ];
     }
@@ -167,15 +180,17 @@ export default class ExtractExports {
           name: "default",
           local: declaration.name,
           kind: "default",
+          loc: {
+            start: node.start,
+            end: node.end,
+          },
         },
       ];
     }
 
     /*
      * export default 123;
-     *
      * export default "hello";
-     *
      * export default {};
      *
      * There is no local binding.
@@ -185,6 +200,10 @@ export default class ExtractExports {
         name: "default",
         local: "default",
         kind: "default",
+        loc: {
+          start: node.start,
+          end: node.end,
+        },
       },
     ];
   }
@@ -193,14 +212,13 @@ export default class ExtractExports {
    * Handles:
    *
    * export * from "./foo";
-   *
    * export * as foo from "./foo";
    */
   private static extractAll(node: ExportAllDeclaration): ExportInfo[] {
     /*
      * export * from "./foo";
      *
-     * This re-exports all named exports from "./foo".
+     * Re-export all named exports from "./foo".
      */
     if (!node.exported) {
       return [
@@ -208,6 +226,10 @@ export default class ExtractExports {
           name: "*",
           local: "*",
           kind: "re-export",
+          loc: {
+            start: node.start,
+            end: node.end,
+          },
         },
       ];
     }
@@ -215,13 +237,19 @@ export default class ExtractExports {
     /*
      * export * as foo from "./foo";
      *
-     * This creates a namespace export.
+     * Namespace export.
      */
+    const name = this.getName(node.exported);
+
     return [
       {
-        name: this.getName(node.exported),
-        local: this.getName(node.exported),
+        name,
+        local: name,
         kind: "namespace",
+        loc: {
+          start: node.start,
+          end: node.end,
+        },
       },
     ];
   }
@@ -236,11 +264,14 @@ export default class ExtractExports {
    * export function foo() {}
    * export class Foo {}
    */
-  private static extractDeclaration(declaration: Declaration): ExportInfo[] {
+  private static extractDeclaration(
+    declaration: Declaration,
+    start: number,
+    end: number,
+  ): ExportInfo[] {
     switch (declaration.type) {
       /*
        * export const foo = 1;
-       *
        * export const foo = 1, bar = 2;
        */
       case "VariableDeclaration":
@@ -251,6 +282,10 @@ export default class ExtractExports {
             name,
             local: name,
             kind: "named" as const,
+            loc: {
+              start,
+              end,
+            },
           }));
         });
 
@@ -267,6 +302,10 @@ export default class ExtractExports {
             name: declaration.id.name,
             local: declaration.id.name,
             kind: "named",
+            loc: {
+              start,
+              end,
+            },
           },
         ];
 
@@ -283,6 +322,10 @@ export default class ExtractExports {
             name: declaration.id.name,
             local: declaration.id.name,
             kind: "named",
+            loc: {
+              start,
+              end,
+            },
           },
         ];
 
@@ -299,7 +342,6 @@ export default class ExtractExports {
    * const foo = 1;
    *
    * const { foo } = obj;
-   *
    * const { foo: bar } = obj;
    *
    * const [foo, bar] = arr;
@@ -316,16 +358,13 @@ export default class ExtractExports {
 
       /*
        * const { foo, bar } = obj;
-       *
        * const { foo: baz } = obj;
-       *
        * const { foo: { bar } } = obj;
        */
       case "ObjectPattern":
         return node.properties.flatMap((property: any) => {
           /*
            * { foo }
-           *
            * { foo: bar }
            */
           if (property.type === "Property") {
@@ -355,11 +394,9 @@ export default class ExtractExports {
         });
 
       /*
-       * const foo = ...
-       *
-       * with default:
-       *
        * const foo = 1;
+       *
+       * const foo = 1 with default value
        */
       case "AssignmentPattern":
         return this.extractBindingNames(node.left);

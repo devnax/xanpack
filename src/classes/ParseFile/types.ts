@@ -18,10 +18,18 @@ export interface ImportInfo {
   local: string;
   kind: ImportKind;
   expression?: Expression | Argument;
+  loc: {
+    start: number;
+    end: number;
+  };
 }
 
 export interface ExportInfo {
   name: string;
   local: string;
   kind: "named" | "default" | "namespace" | "re-export";
+  loc: {
+    start: number;
+    end: number;
+  };
 }

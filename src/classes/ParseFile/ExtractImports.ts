@@ -43,6 +43,10 @@ export default class ExtractImports {
         name: "*",
         local: "",
         kind: "dynamic",
+        loc: {
+          start: node.start,
+          end: node.end,
+        },
       };
     }
 
@@ -52,6 +56,10 @@ export default class ExtractImports {
       name: "*",
       local: "",
       kind: "dynamic",
+      loc: {
+        start: node.start,
+        end: node.end,
+      },
     };
   }
 
@@ -71,6 +79,10 @@ export default class ExtractImports {
             name: "default",
             local: "",
             kind: "require",
+            loc: {
+              start: node.start,
+              end: node.end,
+            },
           },
         ];
       }
@@ -82,6 +94,10 @@ export default class ExtractImports {
           name: "default",
           local: "",
           kind: "require",
+          loc: {
+            start: node.start,
+            end: node.end,
+          },
         },
       ];
     }
@@ -102,6 +118,10 @@ export default class ExtractImports {
           name: "*",
           local: "",
           kind: "static",
+          loc: {
+            start: node.start,
+            end: node.end,
+          },
         },
       ];
     }
@@ -115,6 +135,10 @@ export default class ExtractImports {
             name: "default",
             local: specifier.local.name,
             kind: "static",
+            loc: {
+              start: node.start,
+              end: node.end,
+            },
           };
 
         case "ImportNamespaceSpecifier":
@@ -124,6 +148,10 @@ export default class ExtractImports {
             name: "*",
             local: specifier.local.name,
             kind: "static",
+            loc: {
+              start: node.start,
+              end: node.end,
+            },
           };
 
         case "ImportSpecifier":
@@ -136,6 +164,10 @@ export default class ExtractImports {
                 : String(specifier.imported.value),
             local: specifier.local.name,
             kind: "static",
+            loc: {
+              start: node.start,
+              end: node.end,
+            },
           };
       }
     });
@@ -164,6 +196,10 @@ export default class ExtractImports {
             ? specifier.local.name
             : String(specifier.local.value),
         kind: "re-export" as const,
+        loc: {
+          start: node.start,
+          end: node.end,
+        },
       }));
   }
 
@@ -177,6 +213,10 @@ export default class ExtractImports {
         name: "*",
         local: "",
         kind: "re-export",
+        loc: {
+          start: node.start,
+          end: node.end,
+        },
       },
     ];
   }

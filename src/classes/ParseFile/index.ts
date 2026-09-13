@@ -11,6 +11,7 @@ import ReplaceExport from "./Replace/export.js";
 import Xanpack from "../Xanpack.js";
 import ReplaceRequire from "./Replace/require.js";
 import ReplaceImport from "./Replace/import.js";
+import OptimizeExports from "./optimize/export.js";
 
 class ParseFile {
   format: ModuleFormat = "esm";
@@ -84,6 +85,8 @@ class ParseFile {
       lang,
     });
 
+    console.log(ast.errors);
+
     this.ast = ast;
     this.code = result.code;
     this.sourcemap = result.map;
@@ -95,32 +98,21 @@ class ParseFile {
     walk(ast.program, {
       scopeTracker: this.scopeTracker,
       enter(node) {
-        if (isScript) {
-          replaceRequire.add(node);
-          replaceExport.add(node);
-          replaceImport.add(node);
-        }
+        replaceRequire.add(node);
+        replaceExport.add(node);
+        replaceImport.add(node);
+
         const importsFromNode = ExtractImports.extract(node);
         const exportsFromNode = ExtractExports.extract(node);
         const exportsCjsFromNode = ExtractCJSExports.extract(node);
         parser.imports.push(...importsFromNode);
         parser.exports.push(...exportsFromNode);
         parser.exports.push(...exportsCjsFromNode);
-
-        if (
-          importsFromNode.length &&
-          (node.type === "ExpressionStatement" ||
-            node.type === "VariableDeclaration" ||
-            node.type === "ImportDeclaration")
-        ) {
-          this.remove();
-        }
       },
     });
 
-    // this.code = replaceRequire.apply();
-    // this.code = replaceExport.apply();
-    // this.code = replaceImport.apply();
+    // console.log(this.resolved, this.imports);
+    // console.log(this.code);
 
     // const replacements = [
     //   ...replaceRequire.replacements,
@@ -129,6 +121,7 @@ class ParseFile {
     // ];
 
     // replacements.sort((a, b) => b.start - a.start);
+    // console.log(replacements);
 
     // let _replaced = parser.code;
 
@@ -138,16 +131,8 @@ class ParseFile {
     //     replacement.code +
     //     _replaced.slice(replacement.end);
     // }
-  }
 
-  private indent(code: string, spaces: number): string {
-    const prefix = " ".repeat(spaces);
-
-    return code
-      .trim()
-      .split("\n")
-      .map((line) => (line.trim() ? prefix + line : line))
-      .join("\n");
+    // this.code = _replaced;
   }
 }
 

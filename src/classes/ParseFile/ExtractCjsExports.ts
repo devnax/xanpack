@@ -4,12 +4,7 @@ import type {
   Expression,
   Node,
 } from "oxc-parser";
-
-export interface ExportInfo {
-  name: string;
-  local: string;
-  kind: "named" | "default" | "namespace" | "re-export";
-}
+import { ExportInfo } from "./types";
 
 export default class ExtractCJSExports {
   static extract(node: Node): ExportInfo[] {
@@ -58,6 +53,10 @@ export default class ExtractCJSExports {
         name: target.name,
         local: this.getLocalName(node.right),
         kind: "named",
+        loc: {
+          start: node.start,
+          end: node.end,
+        },
       },
     ];
   }
@@ -173,6 +172,10 @@ export default class ExtractCJSExports {
           name: "default",
           local: node.name,
           kind: "default",
+          loc: {
+            start: node.start,
+            end: node.end,
+          },
         },
       ];
     }
@@ -186,6 +189,10 @@ export default class ExtractCJSExports {
           name: "default",
           local: node.id?.name ?? "default",
           kind: "default",
+          loc: {
+            start: node.start,
+            end: node.end,
+          },
         },
       ];
     }
@@ -199,6 +206,10 @@ export default class ExtractCJSExports {
           name: "default",
           local: node.id?.name ?? "default",
           kind: "default",
+          loc: {
+            start: node.start,
+            end: node.end,
+          },
         },
       ];
     }
@@ -225,6 +236,10 @@ export default class ExtractCJSExports {
         name: "default",
         local: "default",
         kind: "default",
+        loc: {
+          start: node.start,
+          end: node.end,
+        },
       },
     ];
   }
@@ -260,6 +275,10 @@ export default class ExtractCJSExports {
             name,
             local: property.value.name,
             kind: "named",
+            loc: {
+              start: property.start,
+              end: property.end,
+            },
           });
         }
 
@@ -275,6 +294,10 @@ export default class ExtractCJSExports {
         name,
         local: this.getLocalName(property.value),
         kind: "named",
+        loc: {
+          start: property.start,
+          end: property.end,
+        },
       });
     }
 

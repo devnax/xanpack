@@ -3,7 +3,6 @@ import path from "node:path";
 import { minify } from "oxc-minify";
 import { XanpackNodes, XanpackOption } from "../types/Xanpack.js";
 import { SourceMap, transform } from "oxc-transform";
-import { print } from "esrap";
 import tsx from "esrap/languages/ts";
 import ParseFile from "./ParseFile/index.js";
 import Resolver from "./ParseFile/Resolver.js";
@@ -78,10 +77,9 @@ const __xpack = {
 
     for (const node of this.Nodes.values()) {
       try {
-        const result = print(node.ast.program, tsx());
         const id = node.resolved
-          .replace(process.cwd() + "/", "")
-          .replace("node_modules/", "")
+          .replace(process.cwd() + "\\", "")
+          .replace("node_modules\\", "")
           .replaceAll("-", "_")
           .replaceAll("\\", "/")
           .replaceAll(/\//g, "_")
@@ -89,7 +87,7 @@ const __xpack = {
 
         codes += `
 const require_${id} = __mod((module, exports) => {
-${this.indent(result.code, 4)}
+${this.indent(node.code, 4)}
 });
     `;
       } catch (error) {
