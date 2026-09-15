@@ -3,22 +3,22 @@ import { ModuleKind, ParseResult, parseSync } from "oxc-parser";
 import Crypto from "crypto";
 import { ScopeTracker, walk } from "oxc-walker";
 import { SourceMap, transform } from "oxc-transform";
-import type { ExportInfo, ImportInfo, ModuleType, ModuleFormat } from "./types";
-import ExtractImports from "./ExtractImports.js";
-import ExtractExports from "./ExtractExports.js";
-import ExtractCJSExports from "./ExtractCjsExports.js";
-import ReplaceExport from "./Replace/export.js";
+import type { ModuleType, ModuleFormat } from "./types";
+import type { ImportNode } from "../Parser/ImportFinder.js";
+import type { ExportNode } from "../Parser/ExportFinder.js";
 import Xanpack from "../Xanpack.js";
-import ReplaceRequire from "./Replace/require.js";
-import ReplaceImport from "./Replace/import.js";
-import OptimizeExports from "./optimize/export.js";
+import ImportFinder from "../Parser/ImportFinder.js";
+import RequireFinder from "../Parser/RequireFinder.js";
+import ExportFinder from "../Parser/ExportFinder.js";
 
 class ParseFile {
+  file: string;
   format: ModuleFormat = "esm";
   type: ModuleType = "module";
   sourceType: ModuleKind = "module";
-  imports: ImportInfo[] = [];
-  exports: ExportInfo[] = [];
+  imports: ImportNode[] = [];
+  requires: ImportNode[] = [];
+  exports: ExportNode[] = [];
   resolved: string;
   code: string = "";
   sourcemap?: SourceMap;
@@ -27,8 +27,10 @@ class ParseFile {
   scopeTracker: ScopeTracker;
   hash: string = "";
 
-  constructor(resolved: string, xpack: Xanpack) {
-    this.resolved = resolved;
+  constructor(file: string, xpack: Xanpack) {
+    this.file = file;
+    const resolved = xpack.resolver.resolve(process.cwd(), file);
+    this.resolved = resolved.resolved;
     this.xpack = xpack;
     this.hash = Crypto.createHash("md5")
       .update(this.resolved + Date.now().toString())
@@ -78,38 +80,45 @@ class ParseFile {
       jsx: transformOption.jsx,
     });
 
-    const replaceRequire = new ReplaceRequire(result.code);
-    const replaceExport = new ReplaceExport(result.code);
-    const replaceImport = new ReplaceImport(result.code);
     const ast = parseSync(this.resolved, result.code, {
       lang,
     });
-
-    console.log(ast.errors);
 
     this.ast = ast;
     this.code = result.code;
     this.sourcemap = result.map;
     this.sourceType = ast.program.sourceType;
 
-    const parser = this;
     const isScript = ast.program.sourceType === "script";
+    const importFinder = new ImportFinder(this.code);
+    const requireFinder = new RequireFinder(this.code);
+    const exportFinder = new ExportFinder(this.code);
 
     walk(ast.program, {
       scopeTracker: this.scopeTracker,
       enter(node) {
-        replaceRequire.add(node);
-        replaceExport.add(node);
-        replaceImport.add(node);
-
-        const importsFromNode = ExtractImports.extract(node);
-        const exportsFromNode = ExtractExports.extract(node);
-        const exportsCjsFromNode = ExtractCJSExports.extract(node);
-        parser.imports.push(...importsFromNode);
-        parser.exports.push(...exportsFromNode);
-        parser.exports.push(...exportsCjsFromNode);
+        if (!isScript) {
+          importFinder.enter(node);
+          exportFinder.enter(node);
+        } else {
+          requireFinder.enter(node);
+        }
+      },
+      leave(node) {
+        if (isScript) {
+          requireFinder.leave();
+        }
       },
     });
+
+    this.imports = importFinder.imports;
+    this.requires = requireFinder.requires ?? [];
+    this.exports = exportFinder.exports;
+    const exportGenerated = this.generateExports();
+
+    console.log(this.resolved);
+    console.dir(exportFinder.exports, { depth: null });
+    // remove export, export default, and require statements from the code
 
     // console.log(this.resolved, this.imports);
     // console.log(this.code);
@@ -133,6 +142,20 @@ class ParseFile {
     // }
 
     // this.code = _replaced;
+  }
+
+  private generateExports() {
+    const lines: string[] = [];
+    const replacements: Array<{ start: number; end: number }> = [];
+    for (let node of this.exports) {
+      if (node.source) {
+        lines.push(`export ${node};`);
+      }
+    }
+    return {
+      code: lines.join("\n"),
+      replacements,
+    };
   }
 }
 

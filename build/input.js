@@ -23,16 +23,17 @@ const __xpack = {
   importAsync: () => {},
 };
 
-const require_example_input = __mod((module, exports) => {
+const require__Volumes_Work Space_devnax_xanpack_example_input = __mod((module, exports) => {
     import multiply from "./code/multiply";
-    export * as m from "./code/multiply";
+    export * as u from "./code/multiply";
     console.log(multiply(1, 2));
+    require("./code/multiply");
     export const re = () => {
-    	return a;
+    	return require(`./code/${name}`);
     };
 });
     
-const require_example_code_multiply = __mod((module, exports) => {
+const require__Volumes_Work Space_devnax_xanpack_example_code_multiply = __mod((module, exports) => {
     export const multiply = (a, b) => {
     	return a * b;
     };

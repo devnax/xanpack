@@ -1,9 +1,15 @@
 import multiply from "./code/multiply";
 
-export * as m from "./code/multiply";
+export * as u from "./code/multiply";
 console.log(multiply(1, 2));
+if (true) {
+  require("./code/multiply");
+}
 export const re = () => {
-  return a;
+  if (true) {
+    const im = require(`./code/${name}`);
+    return im;
+  }
 };
 
 function test() {

@@ -6,10 +6,19 @@ import {
   TransformOptions,
   TypeScriptOptions,
 } from "oxc-transform";
-import ParseFile from "../classes/ParseFile";
+import { Node } from "oxc-parser";
 
 export type XanpackInput = string | Record<string, any>;
 export type Defines = Record<string, string>;
+export type ResolverResult = {
+  id: string;
+  external: boolean;
+};
+export type ReplacerResult = {
+  code: string;
+  start: number;
+  end: number;
+};
 
 export interface PluginOption {
   name: string;
@@ -17,14 +26,10 @@ export interface PluginOption {
   resolveId?: (
     source: string,
     importer?: string,
-    options?: {
-      isEntry: boolean;
-      attributes: Record<string, string>;
-    },
-  ) => string | null | false | Promise<string | null | false>;
+  ) => ResolverResult | null | Promise<ResolverResult | null>;
 
   load?: (id: string) => string | null | Promise<string | null>;
-
+  replacer?: (id: string, node: Node) => ReplacerResult | null;
   transform?: (
     code: string,
     id: string,
@@ -75,7 +80,7 @@ export interface OutputAsset {
 }
 
 export type XanpackOption = {
-  input: string | Record<string, any>;
+  input: string | string[] | Record<string, any>;
   output: OutputOptions;
   transform?: {
     typescript?: TypeScriptOptions;
@@ -89,4 +94,4 @@ export type XanpackOption = {
   plugins?: Array<PluginOption>;
 };
 
-export type XanpackNodes = Map<string, ParseFile>;
+export type XanpackNodes = Map<string, Node>;
