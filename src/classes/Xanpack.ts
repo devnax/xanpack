@@ -1,6 +1,6 @@
-import path from "node:path";
 import { XanpackOption } from "../types/Xanpack.js";
 import Node from "./Node.js";
+import path from "node:path";
 
 class Xanpack {
   readonly option: XanpackOption;
@@ -22,15 +22,6 @@ class Xanpack {
   }
 
   async build(): Promise<void> {
-    const nodes = await this.buildNode();
-
-    for (const [filePath, node] of nodes) {
-      // Implement the logic to handle each node after building
-      await node.build();
-    }
-  }
-
-  private async buildNode() {
     const input: Record<string, string> = {};
 
     if (typeof this.option.input === "string") {
@@ -46,18 +37,24 @@ class Xanpack {
     }
 
     for (const key in input) {
-      const filePath = input[key];
-      const name = path.basename(filePath, path.extname(filePath));
-      const node = new Node({
-        xpack: this,
-        source: filePath,
-        name,
-        rootDir: path.dirname(filePath),
-      });
-      this.Nodes.set(filePath, node);
+      await this.buildNode(input[key], null);
     }
 
-    return this.Nodes;
+    let codes;
+  }
+
+  private async buildNode(source: string, importer: string | null) {
+    const node = new Node({
+      xpack: this,
+      source: source,
+      importer: importer || source,
+    });
+    await node.build();
+    this.Nodes.set(node.id, node);
+
+    // for (let _import of node.imports) {
+    //   await this.buildNode(_import.source, node.id);
+    // }
   }
 
   // async buildGraph(): Promise<void> {

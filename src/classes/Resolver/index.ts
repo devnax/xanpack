@@ -25,8 +25,7 @@ class Resolver {
     return builtinModules.includes(id) || id.startsWith("node:");
   }
 
-  async resolve(importer: string, source: string): Promise<ResolverResult> {
-    const dirname = path.dirname(importer);
+  async resolve(source: string, importer: string): Promise<ResolverResult> {
     if (this.isBuiltinModule(source)) {
       this.resolved = {
         id: source,
@@ -49,7 +48,7 @@ class Resolver {
       }
     }
 
-    const resolved = this.resolver.sync(dirname, source);
+    const resolved = this.resolver.sync(path.dirname(importer), source);
     if (resolved.error) {
       throw new Error(`Failed to resolve module: ${source}`);
     }

@@ -33,18 +33,9 @@ export interface PluginOption {
   transform?: (
     code: string,
     id: string,
-  ) =>
-    | string
-    | TransformResult
-    | null
-    | Promise<string | TransformResult | null>;
+  ) => string | null | Promise<string | null>;
 
   buildEnd?: (error?: Error) => void | Promise<void>;
-}
-
-export interface TransformResult {
-  code: string;
-  map?: string | object | null;
 }
 
 export interface NormalizedInputOptions {

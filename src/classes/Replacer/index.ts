@@ -1,4 +1,5 @@
 import Node from "../Node";
+import { ParserResult } from "../Parser";
 
 class Replacer {
   Node: Node;
@@ -6,9 +7,11 @@ class Replacer {
     this.Node = Node;
   }
 
-  replace(id: string, node: any) {
+  replace(id: string, parsed: ParserResult) {
     return "";
   }
+
+  imports(imports: ParserResult["imports"]) {}
 }
 
 export default Replacer;

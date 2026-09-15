@@ -1,5 +1,4 @@
 import { Node } from "oxc-parser";
-import { ReplacerResult } from "../../types/Xanpack";
 
 export interface Specifier {
   local: string;

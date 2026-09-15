@@ -7,7 +7,8 @@ class FileLoader {
     this.Node = Node;
   }
 
-  async load(id: string) {
+  async load() {
+    const id = this.Node.id;
     const plugins = this.Node.xpack.option.plugins || [];
     for (const plugin of plugins) {
       if (plugin.load) {

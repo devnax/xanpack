@@ -6,13 +6,22 @@ import RequireFinder from "./RequireFinder.js";
 import ImportFinder from "./ImportFinder.js";
 import { ReplacerResult } from "../../types/Xanpack";
 
+export type ParserResult = {
+  imports: any[];
+  requires: any[];
+  exports: any[];
+  scopeTracker: ScopeTracker;
+  replacements: ReplacerResult[];
+};
+
 class Parser {
   Node: Node;
   constructor(Node: Node) {
     this.Node = Node;
   }
 
-  private getLanguage(id: string): "js" | "jsx" | "ts" | "tsx" {
+  private getLanguage(): "js" | "jsx" | "ts" | "tsx" {
+    const id = this.Node.id;
     const extension = id.split(".").pop()?.toLowerCase();
     switch (extension) {
       case "ts":
@@ -32,8 +41,9 @@ class Parser {
     }
   }
 
-  async parse(id: string, code: string) {
-    const lang = this.getLanguage(id);
+  async parse(code: string) {
+    const id = this.Node.id;
+    const lang = this.getLanguage();
     const parsed = parseSync(id, code, { lang });
 
     const isScript = parsed.program.sourceType === "script";
@@ -79,40 +89,6 @@ class Parser {
         }
       },
     });
-
-    for (let _import of importFinder.imports) {
-      const isRelativeSource =
-        _import.source.startsWith(".") || _import.source.startsWith("/");
-      if (_import.dynamic) {
-        replacements.push({
-          start: _import.start,
-          end: _import.end,
-          code: `__import(${JSON.stringify(_import.source)})`,
-        });
-      } else {
-        replacements.push({
-          start: _import.start,
-          end: _import.end,
-          code: `__require(${JSON.stringify(_import.source)})`,
-        });
-      }
-    }
-
-    for (let _require of requireFinder.requires) {
-      replacements.push({
-        start: _require.start,
-        end: _require.end,
-        code: `__require(${JSON.stringify(_require.source)})`,
-      });
-    }
-
-    for (let _export of exportFinder.exports) {
-      replacements.push({
-        start: _export.exportStart,
-        end: _export.exportEnd,
-        code: ``,
-      });
-    }
 
     return {
       imports: importFinder.imports,
