@@ -4,14 +4,12 @@ import { walk, ScopeTracker } from "oxc-walker";
 import ExportFinder from "./ExportFinder.js";
 import RequireFinder from "./RequireFinder.js";
 import ImportFinder from "./ImportFinder.js";
-import { ReplacerResult } from "../../types/Xanpack";
 
 export type ParserResult = {
   imports: any[];
   requires: any[];
   exports: any[];
   scopeTracker: ScopeTracker;
-  replacements: ReplacerResult[];
 };
 
 class Parser {
@@ -54,33 +52,14 @@ class Parser {
       preserveExitedScopes: true,
     });
 
-    const plugins = this.Node.xpack.option.plugins || [];
-    const replacers = plugins.map((plugin) => plugin.replacer).filter(Boolean);
-    const replacements: ReplacerResult[] = [];
-
     walk(parsed.program, {
       scopeTracker: tracker,
       enter(node) {
-        let skip = false;
-        for (const replacer of replacers) {
-          if (replacer) {
-            const result = replacer(id, node);
-            if (result) {
-              replacements.push(result);
-              skip = true;
-              this.skip();
-              break;
-            }
-          }
-        }
-
-        if (!skip) {
-          if (!isScript) {
-            importFinder.enter(node);
-            exportFinder.enter(node);
-          } else {
-            requireFinder.enter(node);
-          }
+        if (!isScript) {
+          importFinder.enter(node);
+          exportFinder.enter(node);
+        } else {
+          requireFinder.enter(node);
         }
       },
       leave() {
@@ -95,7 +74,6 @@ class Parser {
       requires: requireFinder.requires,
       exports: exportFinder.exports,
       scopeTracker: tracker,
-      replacements,
     };
   }
 }

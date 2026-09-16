@@ -23,6 +23,7 @@ export type ReplacerResult = {
 export interface PluginOption {
   name: string;
   buildStart?: (options: NormalizedInputOptions) => void | Promise<void>;
+  watchChange?: (id: string) => void | Promise<void>;
   resolveId?: (
     source: string,
     importer?: string,

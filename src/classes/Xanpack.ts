@@ -1,10 +1,10 @@
-import { XanpackOption } from "../types/Xanpack.js";
+import { ReplacerResult, XanpackOption } from "../types/Xanpack.js";
 import Node from "./Node.js";
 import path from "node:path";
 
 class Xanpack {
   readonly option: XanpackOption;
-  readonly Nodes = new Map<string, Node>();
+  readonly nodes = new Map<string, Node>();
 
   constructor(option: XanpackOption) {
     this.option = {
@@ -40,7 +40,11 @@ class Xanpack {
       await this.buildNode(input[key], null);
     }
 
-    let codes;
+    for (const node of this.nodes.values()) {
+      const id = node.id;
+      await this.applyReplace(node);
+      console.log(node.code);
+    }
   }
 
   private async buildNode(source: string, importer: string | null) {
@@ -49,87 +53,75 @@ class Xanpack {
       source: source,
       importer: importer || source,
     });
-    await node.build();
-    this.Nodes.set(node.id, node);
 
-    // for (let _import of node.imports) {
-    //   await this.buildNode(_import.source, node.id);
-    // }
+    const resolve = node.resolveSource();
+    if (resolve.external) {
+      return;
+    }
+
+    await node.build();
+    this.nodes.set(node.id, node);
+
+    for (let _import of node.imports) {
+      if (!_import.dynamic) {
+        await this.buildNode(_import.source, node.id);
+      }
+    }
+    for (let _import of node.requires) {
+      if (!_import.dynamic) {
+        await this.buildNode(_import.source, node.id);
+      }
+    }
   }
 
-  // async buildGraph(): Promise<void> {
-  //   const input = this.option.input as string;
-  //   const resolved = this.resolver.resolve(process.cwd(), input);
-  //   await this.buildModule(resolved.resolved);
-  // }
+  private async applyReplace(node: Node) {
+    let replacements: ReplacerResult[] = [];
+    for (const _import of [...node.imports, ...node.requires]) {
+      const name = node.name;
+      if (!_import.dynamic) {
+        replacements.push({
+          start: _import.start,
+          end: _import.end,
+          code: `${name}()`,
+        });
+      } else {
+        replacements.push({
+          start: _import.start,
+          end: _import.end,
+          code: `__require(${JSON.stringify(_import.source)})`,
+        });
+      }
+    }
 
-  // private async buildModule(resolvedPath: string): Promise<ParseFile> {
-  //   const existing = this.Nodes.get(resolvedPath);
+    // exports
+    for (const _export of node.exports) {
+      replacements.push({
+        start: _export.exportStart,
+        end: _export.exportEnd,
+        code: "",
+      });
+    }
 
-  //   if (existing) {
-  //     return existing;
-  //   }
+    // remove comment
+    for (const comment of node.comments) {
+      replacements.push({
+        start: comment.start,
+        end: comment.end,
+        code: "",
+      });
+    }
 
-  //   const parser = new ParseFile(resolvedPath, this);
-  //   this.Nodes.set(resolvedPath, parser);
+    // sort
+    const sorted = replacements.sort((a, b) => b.start - a.start);
+    for (const replacement of sorted) {
+      node.code =
+        node.code.slice(0, replacement.start) +
+        replacement.code +
+        node.code.slice(replacement.end);
+    }
 
-  //   await parser.parse();
-
-  //   for (const _import of parser.imports) {
-  //     if (!_import.source) {
-  //       continue;
-  //     }
-
-  //     const resolved = this.resolver.resolve(parser.resolved, _import.source);
-
-  //     if (!resolved.resolved) {
-  //       continue;
-  //     }
-
-  //     _import.resolved = resolved.resolved;
-
-  //     if (this.Nodes.has(resolved.resolved)) {
-  //       continue;
-  //     }
-
-  //     await this.buildModule(resolved.resolved);
-  //   }
-
-  //   return parser;
-  // }
-
-  // private async writeOutput(input: string, code: string): Promise<void> {
-  //   const outDir = this.option.output.dir;
-
-  //   // delete outdir
-  //   if (fs.existsSync(outDir)) {
-  //     await fs.promises.rm(outDir, {
-  //       recursive: true,
-  //       force: true,
-  //     });
-  //   }
-  //   await fs.promises.mkdir(outDir, {
-  //     recursive: true,
-  //   });
-
-  //   const inputName = path.basename(input);
-  //   const outputName = inputName
-  //     .replace(/\.(tsx?|jsx?|mjs|cjs)$/, "")
-  //     .concat(".js");
-
-  //   const outputPath = path.join(outDir, outputName);
-  //   await fs.promises.writeFile(outputPath, code, "utf8");
-  // }
-
-  // private indent(code: string, spaces: number): string {
-  //   const prefix = " ".repeat(spaces);
-
-  //   return code
-  //     .trim()
-  //     .split("\n")
-  //     .map((line) => (line.trim() ? prefix + line : line))
-  //     .join("\n");
-  // }
+    node.code = node.code.trim();
+  }
 }
 
 export default Xanpack;

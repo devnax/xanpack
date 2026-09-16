@@ -27,7 +27,7 @@ class Transformar {
     }
   }
 
-  async transform(code: string) {
+  async load(code: string) {
     const id = this.Node.id;
     const plugins = this.Node.xpack.option.plugins || [];
 
@@ -40,12 +40,12 @@ class Transformar {
       }
     }
 
-    const lang = this.getLanguage(id);
-    const result = await transform(id, code, {
-      lang,
-      sourcemap: false,
-    });
-    return result.code;
+    // const lang = this.getLanguage(id);
+    // const result = await transform(id, code, {
+    //   lang,
+    //   sourcemap: false,
+    // });
+    return code;
   }
 }
 
