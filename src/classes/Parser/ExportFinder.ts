@@ -15,13 +15,15 @@ export interface ExportNode {
   end: number;
   exportStart: number;
   exportEnd: number;
+  replacement: string;
 }
 
-const EXPORT_KEYWORD_LENGTH = "export".length;
-const EXPORT_DEFAULT_KEYWORD_LENGTH = "export default".length;
+const EXPORT_KEYWORD_LENGTH = "export ".length;
+const EXPORT_DEFAULT_KEYWORD_LENGTH = "export default ".length;
 
 class ExportFinder {
   private code: string;
+
   readonly exports: Array<ExportNode> = [];
 
   constructor(code: string) {
@@ -33,48 +35,77 @@ class ExportFinder {
   }
 
   private findExports(node: any) {
-    // -----------------------------------------
-    // export const foo = ...
-    // export let foo = ...
-    // export var foo = ...
-    // export function foo() {}
-    // export class Foo {}
-    // -----------------------------------------
+    // export const/let/var
     if (node.type === "ExportNamedDeclaration" && node.declaration) {
       const declaration = node.declaration;
 
       if (declaration.type === "VariableDeclaration") {
+        const specifiers: Specifier[] = [];
+
         for (const declarationItem of declaration.declarations) {
           const names = this.getBindingNames(declarationItem.id);
 
           for (const name of names) {
-            this.add({
-              source: "",
-              specifiers: [
-                {
-                  local: name,
-                  name,
-                  kind: node.exportKind === "type" ? "type" : "value",
-                },
-              ],
+            specifiers.push({
+              local: name,
+              name,
               kind: node.exportKind === "type" ? "type" : "value",
-              start: node.start,
-              end: node.end,
-              exportStart: node.start,
-              exportEnd: node.start + EXPORT_KEYWORD_LENGTH,
             });
           }
         }
 
+        const kind = node.exportKind === "type" ? "type" : "value";
+
+        const declarationCode = this.cleanCode(
+          this.code.slice(declaration.start, declaration.end),
+        );
+
+        const replacement =
+          kind === "type"
+            ? declarationCode
+            : [
+                declarationCode,
+                ...specifiers.map(
+                  (specifier) =>
+                    `exports.${this.getExportName(specifier.name)} = ${specifier.local};`,
+                ),
+              ].join("\n");
+
+        this.add({
+          source: "",
+          specifiers,
+          kind,
+          start: node.start,
+          end: node.end,
+          exportStart: node.start,
+          exportEnd: node.start + EXPORT_KEYWORD_LENGTH,
+          replacement,
+        });
+
         return;
       }
 
+      // export function foo()
+      // export class Foo
       if (
         declaration.type === "FunctionDeclaration" ||
         declaration.type === "ClassDeclaration"
       ) {
         if (declaration.id) {
           const name = declaration.id.name;
+          const kind = node.exportKind === "type" ? "type" : "value";
+
+          const declarationCode = this.cleanCode(
+            this.code.slice(declaration.start, declaration.end),
+          );
+
+          const replacement =
+            kind === "type"
+              ? declarationCode
+              : [
+                  declarationCode,
+                  `exports.${this.getExportName(name)} = ${name};`,
+                ].join("\n");
 
           this.add({
             source: "",
@@ -82,14 +113,15 @@ class ExportFinder {
               {
                 local: name,
                 name,
-                kind: node.exportKind === "type" ? "type" : "value",
+                kind,
               },
             ],
-            kind: node.exportKind === "type" ? "type" : "value",
+            kind,
             start: node.start,
             end: node.end,
             exportStart: node.start,
             exportEnd: node.start + EXPORT_KEYWORD_LENGTH,
+            replacement,
           });
         }
 
@@ -97,17 +129,26 @@ class ExportFinder {
       }
     }
 
-    // -----------------------------------------
-    // export { foo };
-    // export { foo as bar };
-    // export { foo, bar as baz };
-    // export type { Foo };
-    // -----------------------------------------
+    // export { foo }
+    // export { foo as bar }
+    // export type { Foo }
     if (node.type === "ExportNamedDeclaration" && !node.source) {
       const specifiers: Specifier[] =
         node.specifiers?.map((sp: any) => {
-          const local = sp.local?.name ?? sp.exported?.name ?? "default";
-          const name = sp.exported?.name ?? sp.local?.name ?? "default";
+          const local =
+            sp.local?.name ??
+            sp.local?.value ??
+            sp.exported?.name ??
+            sp.exported?.value ??
+            "default";
+
+          const name =
+            sp.exported?.name ??
+            sp.exported?.value ??
+            sp.local?.name ??
+            sp.local?.value ??
+            "default";
+
           const kind =
             sp.exportKind === "type" || node.exportKind === "type"
               ? "type"
@@ -121,32 +162,53 @@ class ExportFinder {
         }) ?? [];
 
       if (specifiers.length > 0) {
+        const kind = node.exportKind === "type" ? "type" : "value";
+
+        const replacement =
+          kind === "type"
+            ? ""
+            : specifiers
+                .map(
+                  (specifier) =>
+                    `exports.${this.getExportName(specifier.name)} = ${specifier.local};`,
+                )
+                .join("\n");
+
         this.add({
           source: "",
           specifiers,
-          kind: node.exportKind === "type" ? "type" : "value",
+          kind,
           start: node.start,
           end: node.end,
           exportStart: node.start,
           exportEnd: node.start + EXPORT_KEYWORD_LENGTH,
+          replacement,
         });
       }
 
       return;
     }
 
-    // -----------------------------------------
-    // export { foo } from "./foo";
-    // export { foo as bar } from "./foo";
-    // export { default as Foo } from "./foo";
-    // export type { Foo } from "./types";
-    // export * as utils from "./utils";
-    // -----------------------------------------
+    // export { foo } from "./foo"
+    // export { foo as bar } from "./foo"
+    // export * as utils from "./utils"
     if (node.type === "ExportNamedDeclaration" && node.source) {
       const specifiers: Specifier[] =
         node.specifiers?.map((sp: any) => {
-          const local = sp.local?.name ?? sp.exported?.name ?? "default";
-          const name = sp.exported?.name ?? sp.local?.name ?? "default";
+          const local =
+            sp.local?.name ??
+            sp.local?.value ??
+            sp.exported?.name ??
+            sp.exported?.value ??
+            "default";
+
+          const name =
+            sp.exported?.name ??
+            sp.exported?.value ??
+            sp.local?.name ??
+            sp.local?.value ??
+            "default";
+
           const kind =
             sp.exportKind === "type" || node.exportKind === "type"
               ? "type"
@@ -158,7 +220,7 @@ class ExportFinder {
             kind,
             namespace:
               sp.type === "ExportNamespaceSpecifier"
-                ? sp.exported?.name
+                ? (sp.exported?.name ?? sp.exported?.value)
                 : undefined,
           };
         }) ?? [];
@@ -171,19 +233,22 @@ class ExportFinder {
         end: node.end,
         exportStart: node.start,
         exportEnd: node.start + EXPORT_KEYWORD_LENGTH,
+
+        // Re-exports are resolved later by the linker.
+        replacement: "",
       });
 
       return;
     }
 
-    // -----------------------------------------
-    // export default foo;
-    // export default 123;
-    // export default foo();
-    // -----------------------------------------
+    // export default function foo() {}
+    // export default class Foo {}
+    // export default expression
     if (node.type === "ExportDefaultDeclaration") {
       const declaration = node.declaration;
+
       let local = "default";
+      let replacement = "";
 
       if (
         declaration?.type === "FunctionDeclaration" ||
@@ -191,7 +256,27 @@ class ExportFinder {
       ) {
         if (declaration.id) {
           local = declaration.id.name;
+
+          const declarationCode = this.cleanCode(
+            this.code.slice(declaration.start, declaration.end),
+          );
+
+          replacement = [declarationCode, `exports.default = ${local};`].join(
+            "\n",
+          );
+        } else {
+          const declarationCode = this.cleanCode(
+            this.code.slice(declaration.start, declaration.end),
+          );
+
+          replacement = `exports.default = ${declarationCode};`;
         }
+      } else {
+        const declarationCode = this.cleanCode(
+          this.code.slice(declaration.start, declaration.end),
+        );
+
+        replacement = `exports.default = ${declarationCode};`;
       }
 
       this.add({
@@ -208,16 +293,15 @@ class ExportFinder {
         end: node.end,
         exportStart: node.start,
         exportEnd: node.start + EXPORT_DEFAULT_KEYWORD_LENGTH,
+        replacement,
       });
 
       return;
     }
 
-    // -----------------------------------------
-    // export * as utils from "./utils";
-    // -----------------------------------------
+    // export * as utils from "./utils"
     if (node.type === "ExportAllDeclaration" && node.source && node.exported) {
-      const name = node.exported.name ?? "default";
+      const name = node.exported.name ?? node.exported.value ?? "default";
 
       this.add({
         source: node.source.value,
@@ -234,14 +318,14 @@ class ExportFinder {
         end: node.end,
         exportStart: node.start,
         exportEnd: node.start + EXPORT_KEYWORD_LENGTH,
+
+        replacement: "",
       });
 
       return;
     }
 
-    // -----------------------------------------
-    // export * from "./module";
-    // -----------------------------------------
+    // export * from "./module"
     if (node.type === "ExportAllDeclaration" && node.source) {
       this.add({
         source: node.source.value,
@@ -251,6 +335,8 @@ class ExportFinder {
         end: node.end,
         exportStart: node.start,
         exportEnd: node.start + EXPORT_KEYWORD_LENGTH,
+
+        replacement: "",
       });
     }
   }
@@ -299,6 +385,219 @@ class ExportFinder {
     }
 
     return [];
+  }
+
+  /**
+   * Removes comments while preserving:
+   *
+   * - strings
+   * - template literals
+   * - regex literals
+   * - escaped characters
+   * - line structure
+   */
+  private cleanCode(code: string): string {
+    let result = "";
+
+    let i = 0;
+    let state:
+      | "code"
+      | "single"
+      | "double"
+      | "template"
+      | "line-comment"
+      | "block-comment"
+      | "regex" = "code";
+
+    let escaped = false;
+    let regexClass = false;
+
+    while (i < code.length) {
+      const char = code[i];
+      const next = code[i + 1];
+
+      if (state === "line-comment") {
+        if (char === "\n" || char === "\r") {
+          result += char;
+          state = "code";
+        } else {
+          result += " ";
+        }
+
+        i++;
+        continue;
+      }
+
+      if (state === "block-comment") {
+        if (char === "*" && next === "/") {
+          result += "  ";
+          i += 2;
+          state = "code";
+          continue;
+        }
+
+        if (char === "\n" || char === "\r") {
+          result += char;
+        } else {
+          result += " ";
+        }
+
+        i++;
+        continue;
+      }
+
+      if (state === "single") {
+        result += char;
+
+        if (escaped) {
+          escaped = false;
+        } else if (char === "\\") {
+          escaped = true;
+        } else if (char === "'") {
+          state = "code";
+        }
+
+        i++;
+        continue;
+      }
+
+      if (state === "double") {
+        result += char;
+
+        if (escaped) {
+          escaped = false;
+        } else if (char === "\\") {
+          escaped = true;
+        } else if (char === '"') {
+          state = "code";
+        }
+
+        i++;
+        continue;
+      }
+
+      if (state === "template") {
+        result += char;
+
+        if (escaped) {
+          escaped = false;
+        } else if (char === "\\") {
+          escaped = true;
+        } else if (char === "`") {
+          state = "code";
+        }
+
+        i++;
+        continue;
+      }
+
+      if (state === "regex") {
+        result += char;
+
+        if (escaped) {
+          escaped = false;
+        } else if (char === "\\") {
+          escaped = true;
+        } else if (char === "[") {
+          regexClass = true;
+        } else if (char === "]") {
+          regexClass = false;
+        } else if (char === "/" && !regexClass) {
+          state = "code";
+        }
+
+        i++;
+        continue;
+      }
+
+      // CODE
+
+      if (char === "/" && next === "/") {
+        result += "  ";
+        i += 2;
+        state = "line-comment";
+        continue;
+      }
+
+      if (char === "/" && next === "*") {
+        result += "  ";
+        i += 2;
+        state = "block-comment";
+        continue;
+      }
+
+      if (char === "'") {
+        result += char;
+        state = "single";
+        escaped = false;
+        i++;
+        continue;
+      }
+
+      if (char === '"') {
+        result += char;
+        state = "double";
+        escaped = false;
+        i++;
+        continue;
+      }
+
+      if (char === "`") {
+        result += char;
+        state = "template";
+        escaped = false;
+        i++;
+        continue;
+      }
+
+      /*
+       * Detect a regex literal.
+       *
+       * This is intentionally conservative. We only treat `/` as a
+       * regex when the previous significant character indicates that
+       * an expression can start there.
+       */
+      if (char === "/" && next !== "/" && next !== "*") {
+        const previous = this.getPreviousSignificantCharacter(result);
+
+        if (previous === "" || "([{:;,=!?&|+-*%^~<>".includes(previous)) {
+          result += char;
+          state = "regex";
+          regexClass = false;
+          escaped = false;
+          i++;
+          continue;
+        }
+      }
+
+      result += char;
+      i++;
+    }
+
+    return result.trim();
+  }
+
+  private getPreviousSignificantCharacter(code: string): string {
+    for (let i = code.length - 1; i >= 0; i--) {
+      if (!/\s/.test(code[i])) {
+        return code[i];
+      }
+    }
+
+    return "";
+  }
+
+  private getExportName(name: string): string {
+    /*
+     * Identifier exports can be emitted directly.
+     *
+     * For unusual names, use bracket notation.
+     */
+    if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) {
+      return name;
+    }
+
+    return JSON.stringify(name);
   }
 
   private add(exportNode: ExportNode) {

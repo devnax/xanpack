@@ -1,6 +1,7 @@
 import { ReplacerResult, XanpackOption } from "../types/Xanpack.js";
 import Node from "./Node.js";
 import path from "node:path";
+import fs from "node:fs/promises";
 
 class Xanpack {
   readonly option: XanpackOption;
@@ -40,10 +41,19 @@ class Xanpack {
       await this.buildNode(input[key], null);
     }
 
+    let finalCode = "";
     for (const node of this.nodes.values()) {
-      const id = node.id;
-      await this.applyReplace(node);
-      console.log(node.code);
+      const code = await node.generate();
+      finalCode += code + "\n\n";
+    }
+
+    // write to output file
+    if (this.option.output?.dir) {
+      await fs.writeFile(
+        path.join(this.option.output.dir, "bundle.js"),
+        finalCode,
+        "utf-8",
+      );
     }
   }
 
@@ -54,24 +64,19 @@ class Xanpack {
       importer: importer || source,
     });
 
-    const resolve = node.resolveSource();
-    if (resolve.external) {
+    const resolve = await node.resolve();
+    this.nodes.set(resolve.id, node);
+    if (resolve.type !== "source") {
       return;
     }
 
     await node.build();
-    this.nodes.set(node.id, node);
 
-    for (let _import of node.imports) {
-      if (!_import.dynamic) {
-        await this.buildNode(_import.source, node.id);
-      }
-    }
-    for (let _import of node.requires) {
-      if (!_import.dynamic) {
-        await this.buildNode(_import.source, node.id);
-      }
-    }
+    // for (let _import of [...node.imports, ...node.requires]) {
+    //   if (!_import.dynamic) {
+    //     await this.buildNode(_import.source, node.id);
+    //   }
+    // }
   }
 
   private async applyReplace(node: Node) {
@@ -88,7 +93,7 @@ class Xanpack {
         replacements.push({
           start: _import.start,
           end: _import.end,
-          code: `__require(${JSON.stringify(_import.source)})`,
+          code: `__require(${_import.source})`,
         });
       }
     }

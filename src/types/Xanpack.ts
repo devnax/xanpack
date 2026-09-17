@@ -12,7 +12,7 @@ export type XanpackInput = string | Record<string, any>;
 export type Defines = Record<string, string>;
 export type ResolverResult = {
   id: string;
-  external: boolean;
+  type: "source" | "external" | "asset";
 };
 export type ReplacerResult = {
   code: string;

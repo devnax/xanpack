@@ -7,7 +7,7 @@ import { ResolverFactory } from "oxc-resolver";
 import { builtinModules } from "node:module";
 import { Comment, parseSync } from "oxc-parser";
 import { walk, ScopeTracker } from "oxc-walker";
-import { ReplacerResult } from "../types/Xanpack.js";
+import { ReplacerResult, ResolverResult } from "../types/Xanpack.js";
 import RequireFinder from "./Parser/RequireFinder.js";
 import { SourceMap, transform } from "oxc-transform";
 
@@ -24,6 +24,8 @@ class Node {
   xpack: Xanpack;
   source: string;
   importer: string;
+  sourceType: ResolverResult["type"] = "source";
+
   sourcemap: SourceMap | undefined;
   imports: ImportNode[] = [];
   requires: ImportNode[] = [];
@@ -41,51 +43,50 @@ class Node {
   }
 
   async build() {
-    await this.resolve();
+    if (!this.id) {
+      throw new Error(
+        `Source not resolved for node with source: ${this.source}`,
+      );
+    }
     await this.load();
     await this.transform();
     this.replacer();
     await this.parse();
     this.name = this.generateName(this.id);
+
+    // for (const _import of [...this.imports, ...this.requires]) {
+    //   if (!_import.dynamic) {
+    //     const node = new Node({
+    //       xpack: this.xpack,
+    //       source: _import.source,
+    //       importer: this.id,
+    //     });
+    //     const resolved = await node.resolve();
+    //     if (this.xpack.nodes.has(resolved.id)) {
+    //       continue;
+    //     }
+    //     this.xpack.nodes.set(resolved.id, node);
+    //     _import.resolved = resolved.id;
+
+    //     if (resolved.type === "source") {
+    //       await node.build();
+    //     }
+    //   }
+    // }
   }
 
-  resolveSource() {
-    const source = this.source;
-    const isBuiltin =
-      builtinModules.includes(source) || source.startsWith("node:");
-    if (isBuiltin) {
-      this.id = this.source;
-      return {
-        id: this.source,
-        external: true,
-      };
-    }
-    const resolver = new ResolverFactory({
-      conditionNames: ["node", "import"],
-      extensions: [".ts", ".tsx", ".js", ".jsx", ".json"],
-    });
-
-    const resolved = resolver.sync(path.dirname(this.importer), this.source);
-    if (resolved.error) {
-      throw new Error(`Failed to resolve module: ${this.source}`);
-    }
-    this.id = resolved.path as string;
-    return {
-      id: resolved.path as string,
-      external: false,
-    };
-  }
-
-  private async resolve() {
+  async resolve() {
     const plugins = this.xpack.option.plugins || [];
     const source = this.source;
     const isBuiltin =
       builtinModules.includes(source) || source.startsWith("node:");
+
     if (isBuiltin) {
       this.id = this.source;
+      this.sourceType = "external";
       return {
         id: this.source,
-        external: true,
+        type: "external",
       };
     }
 
@@ -94,15 +95,89 @@ class Node {
         const result = await plugin.resolveId(this.source, this.importer);
         if (result) {
           this.id = result.id;
+          this.sourceType = result.type;
           return {
             id: result.id,
-            external: result.external,
+            type: result.type,
           };
         }
       }
     }
 
-    return this.resolveSource();
+    const extensions = [".ts", ".tsx", ".js", ".jsx", ".json"];
+    const resolver = new ResolverFactory({
+      conditionNames: ["node", "import"],
+      extensions: extensions,
+    });
+
+    const resolved = resolver.sync(path.dirname(this.importer), this.source);
+    if (resolved.error) {
+      throw new Error(`Failed to resolve module: ${this.source}`);
+    }
+    const ext = path.extname(resolved.path as string);
+    const type = extensions.includes(ext) ? "source" : "asset";
+    this.id = resolved.path as string;
+    this.sourceType = type;
+    return {
+      id: resolved.path as string,
+      type: type,
+    };
+  }
+
+  async generate() {
+    let replacements: ReplacerResult[] = [];
+    for (const _import of [...this.imports, ...this.requires]) {
+      if (!_import.dynamic) {
+        const importNode = this.xpack.nodes.get(_import.resolved!);
+        const isSource = importNode?.sourceType === "source";
+        if (!isSource) continue;
+
+        replacements.push({
+          start: _import.start,
+          end: _import.end,
+          code: `${importNode.name}()`,
+        });
+      } else {
+        replacements.push({
+          start: _import.start,
+          end: _import.end,
+          code: `__require(${_import.source})`,
+        });
+      }
+    }
+
+    // for (let _export of this.exports) {
+    //   replacements.push({
+    //     start: _export.start,
+    //     end: _export.end,
+    //     code: _export.replacement,
+    //   });
+    // }
+
+    // apply replacements
+    let code = this.code;
+    const sorted = replacements.sort((a, b) => b.start - a.start);
+    for (const replacement of sorted) {
+      code =
+        code.slice(0, replacement.start) +
+        replacement.code +
+        code.slice(replacement.end);
+    }
+
+    this.code = code;
+    const result = code.replace(
+      /^(\s*)export\s+(?=(?:const|let|var|function|class)\b)/gm,
+      "$1",
+    );
+
+    return `const ${this.name} = __xmod((module, exports) => {\n${result}\n})`;
+  }
+
+  private indent() {
+    return (this.code = this.code
+      .split("\n")
+      .map((line) => "  " + line)
+      .join("\n"));
   }
 
   private async load() {
@@ -138,23 +213,29 @@ class Node {
     const parsed = parseSync(id, code, { lang });
     const plugins = this.xpack.option.plugins || [];
     const replacers = plugins.map((plugin) => plugin.replacer).filter(Boolean);
-    if (replacers.length === 0) return;
-    const replacements: Array<ReplacerResult> = [];
 
-    walk(parsed.program, {
-      enter(node) {
-        for (const replacer of replacers) {
-          if (replacer) {
-            const result = replacer(id, node);
-            if (result) {
-              replacements.push(result);
-              this.skip();
-              break;
+    const replacements: Array<ReplacerResult> = [];
+    if (replacers.length === 0) {
+      walk(parsed.program, {
+        enter(node) {
+          for (const replacer of replacers) {
+            if (replacer) {
+              const result = replacer(id, node);
+              if (result) {
+                replacements.push(result);
+                this.skip();
+                break;
+              }
             }
           }
-        }
-      },
-    });
+        },
+      });
+    }
+
+    for (const comment of parsed.comments) {
+      const { start, end } = comment;
+      replacements.push({ start, end, code: "" });
+    }
 
     const sorted = replacements.sort((a, b) => b.start - a.start);
     for (const { start, end, code: _code } of sorted) {

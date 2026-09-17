@@ -15,6 +15,7 @@ export interface ImportNode {
   kind: "value" | "type";
   start: number;
   end: number;
+  resolved?: string;
 }
 
 class ImportFinder {
