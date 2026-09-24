@@ -16,7 +16,7 @@ class Xanpack {
   }
 
   async build() {
-    const input: any = {};
+    const input: Record<string, string> = {};
     if (typeof this.option.input === "string") {
       const name = this.generateName(this.option.input);
       input[name] = this.option.input;
@@ -31,10 +31,14 @@ class Xanpack {
 
     for (let name in input) {
       const source = input[name];
-      const node = new Node(this, source);
+      const node = new Node(this, source, undefined, name);
       await node.build();
     }
-    // console.log(this.nodes);
+    for (let node of this.nodes.values()) {
+      console.log("");
+      console.log(node.id);
+      console.log(node.code);
+    }
   }
 
   generateName(id: string): string {

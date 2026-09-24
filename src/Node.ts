@@ -4,6 +4,7 @@ import type {
   ResolverResult,
   ExportNode,
   RequireNode,
+  ReplacerResult,
 } from "./types";
 import fs from "fs/promises";
 import { parseSync } from "oxc-parser";
@@ -12,11 +13,11 @@ import ParseExports from "./Parser/exports.js";
 import ParseImport from "./Parser/imports.js";
 import ParseRequire from "./Parser/requires.js";
 import Xanpack from "./Xanpack.js";
+import { XanpackError } from "./utils/Errors.js";
 
 class Node {
   readonly xpack: Xanpack;
   readonly source: string;
-  private lang: "ts" | "js";
   readonly imports: ImportNode[] = [];
   readonly exports: ExportNode[] = [];
   readonly requires: RequireNode[] = [];
@@ -26,15 +27,36 @@ class Node {
   code: string;
   name: string;
 
-  constructor(xpack: Xanpack, source: string, importer?: string) {
+  constructor(
+    xpack: Xanpack,
+    source: string,
+    importer?: string,
+    name?: string,
+  ) {
     this.xpack = xpack;
     this.source = source;
     this.importer = importer;
     this.code = "";
-    this.lang = source.endsWith(".ts") || source.endsWith(".tsx") ? "ts" : "js";
-    this.name = xpack.generateName(source);
+    this.name = name ?? "";
     this.id = source;
     this.isEntry = !importer;
+  }
+
+  private get lang() {
+    const ext = this.id.toLowerCase().split(".").pop();
+    switch (ext) {
+      case "ts":
+        return "ts";
+
+      case "tsx":
+        return "tsx";
+
+      case "jsx":
+        return "jsx";
+
+      default:
+        return "js";
+    }
   }
 
   private async resolve(): Promise<ResolverResult> {
@@ -75,11 +97,15 @@ class Node {
       }
     }
 
-    const result = await transform(this.id, code, {
+    const result = await transform(this.source, code, {
       ...this.xpack.option.transform,
       lang: this.lang,
       sourcemap: this.xpack.option.output?.sourcemap || false,
     });
+
+    if (result.errors && result.errors.length > 0) {
+      throw new XanpackError((result as any).errors[0].codeframe);
+    }
 
     return result.code;
   }
@@ -87,14 +113,16 @@ class Node {
   async build() {
     const resolved = await this.resolve();
     if (resolved.type === "external" || this.xpack.nodes.has(resolved.id)) {
-      // return;
+      return;
     }
+
+    this.name = this.name || this.xpack.generateName(resolved.id);
+
     this.id = resolved.id;
     this.xpack.nodes.set(this.id, this);
 
     this.code = await this.load();
     this.code = await this.transform(this.code);
-    console.log(this.code);
 
     const parsed = parseSync(this.id, this.code, { lang: this.lang });
     const parseExport = new ParseExports(this);
@@ -107,15 +135,61 @@ class Node {
         parseImport.parse(node);
         parseRequire.parse(node);
       },
-      leave() {},
     });
+
+    let replacements: ReplacerResult[] = [];
 
     for (let _import of this.imports) {
       const node = new Node(this.xpack, _import.source, this.id);
       await node.build();
+
+      if (_import.type === "static") {
+        replacements.push({
+          start: _import.start,
+          end: _import.end,
+          code: ``,
+        });
+        // if (_import.specifiers) {
+        //   const specifiers: string[] = [];
+        //   for (let specifier of _import.specifiers) {
+        //     specifiers.push(``);
+        //   }
+        //   console.log(specifiers);
+        // }
+      }
     }
 
-    console.dir(this.id, { depth: null });
+    for (let _export of this.exports) {
+      if (_export.type === "default") {
+        replacements.push({
+          start: _export.start,
+          end: _export.start + "export default".length,
+          code: `exports.default =`,
+        });
+      } else if (_export.type === "identifier") {
+        replacements.push({
+          start: _export.start,
+          end: _export.start + "export ".length,
+          code: ``,
+        });
+
+        for (let specifier of _export.specifiers) {
+          replacements.push({
+            start: _export.end,
+            end: _export.end,
+            code: `\nexports.${specifier.exported} = ${specifier.local};`,
+          });
+        }
+      }
+    }
+
+    const sorted = replacements.sort((a, b) => b.start - a.start);
+    for (let replacement of sorted) {
+      this.code =
+        this.code.slice(0, replacement.start) +
+        replacement.code +
+        this.code.slice(replacement.end);
+    }
   }
 }
 export default Node;
