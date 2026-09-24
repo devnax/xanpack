@@ -1,23 +1,12 @@
 import path from "path";
-import xanpack from "./functions/xanpack.js";
+import Xanpack from "./Xanpack.js";
 
-const main = async () => {
-  console.time("build");
-  for (let i = 0; i < 1; i++) {
-    await xanpack({
-      input: path.resolve(process.cwd(), "example/input.tsx"),
-      output: {
-        dir: path.resolve(process.cwd(), "build"),
-        format: "esm",
-      },
-      transform: {
-        define: {
-          __DEV__: JSON.stringify(false),
-          "process.env.NODE_ENV": JSON.stringify("development"),
-        },
-      },
-    });
-  }
-  console.timeEnd("build");
-};
-main();
+const bundler = new Xanpack({
+  input: path.resolve(process.cwd(), "example/input.tsx"),
+  output: {
+    dir: "../build",
+    format: "esm",
+  },
+});
+
+bundler.build();

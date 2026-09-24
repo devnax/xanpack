@@ -1,9 +1,7 @@
 import {
   CompilerAssumptions,
   DecoratorOptions,
-  Helpers,
   JsxOptions,
-  TransformOptions,
   TypeScriptOptions,
 } from "oxc-transform";
 import { Node } from "oxc-parser";
@@ -13,6 +11,7 @@ export type Defines = Record<string, string>;
 export type ResolverResult = {
   id: string;
   type: "source" | "external" | "asset";
+  external?: boolean;
 };
 export type ReplacerResult = {
   code: string;
@@ -87,3 +86,44 @@ export type XanpackOption = {
 };
 
 export type XanpackNodes = Map<string, Node>;
+
+// Export Node Types
+export type ExportSpecifier = {
+  local: string;
+  exported: string;
+};
+
+export type ExportNode = {
+  type: "export" | "re-export" | "identifier" | "default" | "namespace";
+  source?: string;
+  namespace?: string;
+  specifiers: ExportSpecifier[];
+  start: number;
+  end: number;
+};
+
+export interface ImportSpecifier {
+  type: "default" | "named" | "namespace";
+  local: string;
+  imported: string;
+  namespace?: string;
+}
+
+export interface ImportNode {
+  type: "static" | "dynamic" | "re-export";
+  source: string;
+  glob?: string;
+  specifiers?: ImportSpecifier[];
+  start: number;
+  end: number;
+  resolved?: string;
+}
+
+export interface RequireNode {
+  type: "static" | "dynamic";
+  source: string;
+  glob?: string;
+  start: number;
+  end: number;
+  resolved?: string;
+}

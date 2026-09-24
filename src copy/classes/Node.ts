@@ -316,7 +316,6 @@ class Node {
       .replace(/\/index\.(js|ts|tsx)$/, "")
       .replace(/\.(js|ts|tsx)$/, "")
       .replace(/[^a-zA-Z0-9_$]/g, "_");
-
     return id;
   }
 }

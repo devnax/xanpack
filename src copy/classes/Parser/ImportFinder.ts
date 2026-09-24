@@ -32,6 +32,12 @@ class ImportFinder {
     this.findReExportImports(node);
   }
 
+  /**
+   * import static modules from the code
+   * example:
+   * import { useState } from "react";
+   * import ReactDOM from "react-dom";
+   */
   private findStaticImports(node: Node) {
     if (node.type === "ImportDeclaration") {
       const specifiers = node.specifiers.map((sp: any) => ({

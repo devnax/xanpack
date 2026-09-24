@@ -1,6 +1,6 @@
-import fs from "fs";
+import fs from "node:fs";
 import { ModuleKind, ParseResult, parseSync } from "oxc-parser";
-import Crypto from "crypto";
+import Crypto from "node:crypto";
 import { ScopeTracker, walk } from "oxc-walker";
 import { SourceMap, transform } from "oxc-transform";
 import type { ModuleType, ModuleFormat } from "./types";
@@ -29,8 +29,10 @@ class ParseFile {
 
   constructor(file: string, xpack: Xanpack) {
     this.file = file;
-    const resolved = xpack.resolver.resolve(process.cwd(), file);
-    this.resolved = resolved.resolved;
+    // Note: resolver call commented out - use Node.ts instead for module resolution
+    // const resolved = xpack.resolver.resolve(process.cwd(), file);
+    // this.resolved = resolved.resolved;
+    this.resolved = file; // Fallback to file path
     this.xpack = xpack;
     this.hash = Crypto.createHash("md5")
       .update(this.resolved + Date.now().toString())

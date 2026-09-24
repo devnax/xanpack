@@ -1,53 +1,43 @@
-const __xpack = {
-  __module: Object.create(null),
-  __cache: Object.create(null),
+const __xmods = Object.create(null);
 
-  module(id, factory) {
-    __xpack.__module[id] = factory;
-    __xpack.require(id);
-  },
-  import: (id) => {
-    if (__xpack.__cache[id]) {
-      return __xpack.__cache[id].exports;
-    }
-
-    const module = {
-      exports: {},
-    };
-
-    __xpack.__cache[id] = module;
-    __xpack.__module[id](module, module.exports);
-
-    return module.exports;
-  },
-  importAsync: () => {},
+const __require = (source) => {
+  if (typeof __xmods[source] === "function") {
+    return __xmods[source]();
+  }
+  if (source in __xmods) {
+    return __xmods[source].exports;
+  }
+  return import(source);
 };
 
-__xpack.module("react", (module, exports) => {
-  // React module
+const __xmod = (source, callback) => {
+  if (!(source in __xmods)) {
+    __xmods[source] = () => {
+      const module = { exports: {} };
+      callback(module, module.exports);
+      __xmods[source] = module;
+      return module.exports;
+    };
+  }
+
+  return () => __require(source);
+};
+
+const require_react = __xmod("react", (module, exports) => {
+  const dom = require_react_dom();
+  console.log("dom", dom);
 });
 
-__xpack.module("react-dom", (module, exports) => {
-  const React = __xpack.require("react");
-
-  // react-dom module
+const require_react_dom = __xmod("react-dom", (module, exports) => {
+  exports.name = "React dom";
 });
 
-__xpack.module("./App.tsx", (module, exports) => {
-  const __xpack_require_react = __xpack.import("react");
-  const __xpack_require_react_dom = __xpack.import("react-dom");
-  const React = __xpack_require_react;
-  const useState = __xpack_require_react.useState;
-  const ReactDOM = __xpack_require_react_dom;
-
-  const call = async () => {
-    const mod = await __xpack.importAsync("./module.js");
-  };
-
-  const App = () => {
-    const [count, setCount] = useState(0);
-    return React.createElement("div", null, "Hello, world! Count: ", count);
-  };
-
-  ReactDOM.render(React.createElement(App), document.getElementById("root"));
+const require_app = __xmod("app", (module, exports) => {
+  const React = require_react();
+  const ReactDOM = require_react_dom();
 });
+
+const app = __require("app");
+const Name = app.name;
+export { Name };
+export default app;
