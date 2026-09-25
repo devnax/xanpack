@@ -31,14 +31,25 @@ class Xanpack {
 
     for (let name in input) {
       const source = input[name];
-      const node = new Node(this, source, undefined, name);
+      const node = new Node(this, source);
       await node.build();
     }
     for (let node of this.nodes.values()) {
-      console.log("");
-      console.log(node.id);
-      console.log(node.code);
+      // console.log(node.code);
     }
+  }
+
+  getNode(source: string): Node | undefined {
+    for (let node of this.nodes.values()) {
+      if (node.source === source) {
+        return node;
+      }
+    }
+    return undefined;
+  }
+
+  generateChunkName(id: string): string {
+    return this.generateName(id);
   }
 
   generateName(id: string): string {

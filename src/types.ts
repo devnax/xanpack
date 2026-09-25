@@ -94,7 +94,12 @@ export type ExportSpecifier = {
 };
 
 export type ExportNode = {
-  type: "export" | "re-export" | "identifier" | "default" | "namespace";
+  type:
+    | "export" // export {name}
+    | "re-export" // export {name} from "module"
+    | "identifier" // export const name = value;
+    | "default" // export default value;
+    | "namespace"; // export * as name from "module"
   source?: string;
   namespace?: string;
   specifiers: ExportSpecifier[];
@@ -117,6 +122,7 @@ export interface ImportNode {
   start: number;
   end: number;
   resolved?: string;
+  external?: boolean;
 }
 
 export interface RequireNode {

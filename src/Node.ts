@@ -4,7 +4,6 @@ import type {
   ResolverResult,
   ExportNode,
   RequireNode,
-  ReplacerResult,
 } from "./types";
 import fs from "fs/promises";
 import { parseSync } from "oxc-parser";
@@ -12,6 +11,7 @@ import { walk } from "oxc-walker";
 import ParseExports from "./Parser/exports.js";
 import ParseImport from "./Parser/imports.js";
 import ParseRequire from "./Parser/requires.js";
+import Replacement from "./Replacement.js";
 import Xanpack from "./Xanpack.js";
 import { XanpackError } from "./utils/Errors.js";
 
@@ -21,25 +21,17 @@ class Node {
   readonly imports: ImportNode[] = [];
   readonly exports: ExportNode[] = [];
   readonly requires: RequireNode[] = [];
-  readonly isEntry: boolean;
-  id: string;
-  importer?: string;
-  code: string;
-  name: string;
 
-  constructor(
-    xpack: Xanpack,
-    source: string,
-    importer?: string,
-    name?: string,
-  ) {
+  id: string = "<unresolved>";
+  importer?: string;
+  code: string = "";
+  name: string = "";
+  type: ResolverResult["type"] = "source";
+
+  constructor(xpack: Xanpack, source: string, importer?: string) {
     this.xpack = xpack;
     this.source = source;
     this.importer = importer;
-    this.code = "";
-    this.name = name ?? "";
-    this.id = source;
-    this.isEntry = !importer;
   }
 
   private get lang() {
@@ -112,14 +104,15 @@ class Node {
 
   async build() {
     const resolved = await this.resolve();
+    this.type = resolved.type;
+
     if (resolved.type === "external" || this.xpack.nodes.has(resolved.id)) {
       return;
     }
 
-    this.name = this.name || this.xpack.generateName(resolved.id);
-
+    this.xpack.nodes.set(resolved.id, this);
+    this.name = this.xpack.generateName(resolved.id);
     this.id = resolved.id;
-    this.xpack.nodes.set(this.id, this);
 
     this.code = await this.load();
     this.code = await this.transform(this.code);
@@ -128,6 +121,7 @@ class Node {
     const parseExport = new ParseExports(this);
     const parseImport = new ParseImport(this);
     const parseRequire = new ParseRequire(this);
+    const replacement = new Replacement(this);
 
     walk(parsed.program, {
       enter(node) {
@@ -137,59 +131,21 @@ class Node {
       },
     });
 
-    let replacements: ReplacerResult[] = [];
-
     for (let _import of this.imports) {
       const node = new Node(this.xpack, _import.source, this.id);
       await node.build();
 
-      if (_import.type === "static") {
-        replacements.push({
-          start: _import.start,
-          end: _import.end,
-          code: ``,
-        });
-        // if (_import.specifiers) {
-        //   const specifiers: string[] = [];
-        //   for (let specifier of _import.specifiers) {
-        //     specifiers.push(``);
-        //   }
-        //   console.log(specifiers);
-        // }
-      }
+      _import.external = node.type === "external";
+      _import.resolved = node.id;
+
+      replacement.add({
+        start: _import.start,
+        end: _import.end,
+        code: ``,
+      });
     }
 
-    for (let _export of this.exports) {
-      if (_export.type === "default") {
-        replacements.push({
-          start: _export.start,
-          end: _export.start + "export default".length,
-          code: `exports.default =`,
-        });
-      } else if (_export.type === "identifier") {
-        replacements.push({
-          start: _export.start,
-          end: _export.start + "export ".length,
-          code: ``,
-        });
-
-        for (let specifier of _export.specifiers) {
-          replacements.push({
-            start: _export.end,
-            end: _export.end,
-            code: `\nexports.${specifier.exported} = ${specifier.local};`,
-          });
-        }
-      }
-    }
-
-    const sorted = replacements.sort((a, b) => b.start - a.start);
-    for (let replacement of sorted) {
-      this.code =
-        this.code.slice(0, replacement.start) +
-        replacement.code +
-        this.code.slice(replacement.end);
-    }
+    replacement.apply();
   }
 }
 export default Node;
